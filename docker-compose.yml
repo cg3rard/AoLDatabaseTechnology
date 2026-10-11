@@ -1,0 +1,27 @@
+services:
+  db:
+    image: mysql:8.0
+    container_name: apartment_mysql_db
+    restart: always
+    # Nilai diambil dari file .env di root (lihat .env.example)
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?isi MYSQL_ROOT_PASSWORD di .env}
+      MYSQL_DATABASE: ${DB_NAME:?isi DB_NAME di .env}
+      MYSQL_USER: ${DB_USER:?isi DB_USER di .env}
+      MYSQL_PASSWORD: ${DB_PASSWORD:?isi DB_PASSWORD di .env}
+    ports:
+      # Hanya bisa diakses dari komputer ini
+      - "127.0.0.1:${DB_PORT:-3306}:3306"
+    volumes:
+      # Menyimpan data database secara permanen agar tidak hilang saat container mati
+      - mysql_data:/var/lib/mysql
+      # Otomatis menjalankan script .sql saat container pertama kali dibuat
+      - ./db-init:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  mysql_data:
