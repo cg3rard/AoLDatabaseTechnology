@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strconv"
+	"time"
 
 	"github.com/cg3rard/AoLDatabaseTechnology/backend/database"
 	"github.com/cg3rard/AoLDatabaseTechnology/backend/routes"
@@ -50,10 +52,31 @@ func main() {
 	defer sqlDB.Close()
 	log.Println("Berhasil terhubung ke MySQL!")
 
+	// Admin pertama dibuat dari ADMIN_EMAIL + ADMIN_PASSWORD (hanya jika belum ada admin).
+	created, err := database.SeedAdmin(db, os.Getenv("ADMIN_EMAIL"), os.Getenv("ADMIN_PASSWORD"))
+	if err != nil {
+		log.Fatal("Gagal membuat admin awal: ", err)
+	}
+	if created {
+		log.Println("Akun admin awal dibuat:", os.Getenv("ADMIN_EMAIL"))
+	}
+
+	// Pengaturan login (JWT).
+	jwtSecret := mustEnv("JWT_SECRET")
+	if len(jwtSecret) < 32 {
+		log.Fatal("JWT_SECRET minimal 32 karakter")
+	}
+	ttlHours, err := strconv.Atoi(getEnv("JWT_EXPIRE_HOURS", "24"))
+	if err != nil || ttlHours <= 0 {
+		log.Fatal("JWT_EXPIRE_HOURS harus berupa angka positif")
+	}
+
 	app := fiber.New()
 	app.Use(logger.New())
 	app.Use(cors.New(cors.Config{
 		AllowOrigins: getEnv("CORS_ORIGINS", "http://localhost:5173"),
+		AllowHeaders: "Origin, Content-Type, Accept, Authorization",
+		AllowMethods: "GET,POST,PUT,PATCH,DELETE,OPTIONS",
 	}))
 
 	app.Get("/", func(c *fiber.Ctx) error {
@@ -67,7 +90,7 @@ func main() {
 		return c.JSON(fiber.Map{"status": "ok"})
 	})
 
-	routes.Setup(app, db)
+	routes.Setup(app, db, []byte(jwtSecret), time.Duration(ttlHours)*time.Hour)
 
 	port := getEnv("APP_PORT", "8080")
 	log.Fatal(app.Listen("127.0.0.1:" + port))

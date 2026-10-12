@@ -1,46 +1,48 @@
-import { useEffect, useState } from 'react'
+import { BrowserRouter, Navigate, Outlet, Route, Routes } from 'react-router-dom'
+import Layout from './components/Layout'
+import ResourcePage from './components/ResourcePage'
+import AuthProvider from './context/AuthProvider'
+import { useAuth } from './context/auth-context'
+import { RESOURCES, canRead } from './lib/resources'
+import BookingsPage from './pages/BookingsPage'
+import Dashboard from './pages/Dashboard'
+import InvoicesPage from './pages/InvoicesPage'
+import Login from './pages/Login'
 
-const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8080'
-
-function App() {
-  // 'loading' | 'ok' | 'error'
-  const [status, setStatus] = useState('loading')
-
-  useEffect(() => {
-    const controller = new AbortController()
-    fetch(`${API_URL}/api/health`, { signal: controller.signal })
-      .then((res) => setStatus(res.ok ? 'ok' : 'error'))
-      .catch((err) => {
-        if (err.name !== 'AbortError') setStatus('error')
-      })
-    return () => controller.abort()
-  }, [])
-
-  const label = {
-    loading: 'Memeriksa koneksi…',
-    ok: 'Backend & database terhubung',
-    error: 'Backend atau database tidak terjangkau',
-  }[status]
-
-  const color = {
-    loading: 'bg-slate-400',
-    ok: 'bg-emerald-500',
-    error: 'bg-red-500',
-  }[status]
-
-  return (
-    <main className="flex min-h-screen items-center justify-center bg-slate-50 p-6 text-slate-900">
-      <section className="w-full max-w-md rounded-2xl bg-white p-8 shadow-sm ring-1 ring-slate-200">
-        <h1 className="text-2xl font-bold">Property Management</h1>
-        <p className="mt-1 text-sm text-slate-500">AoL Database Technology</p>
-
-        <div className="mt-6 flex items-center gap-3" role="status" aria-live="polite">
-          <span className={`h-3 w-3 rounded-full ${color}`} aria-hidden="true" />
-          <span className="text-sm">{label}</span>
-        </div>
-      </section>
-    </main>
-  )
+function RequireAuth() {
+  const { user, loading } = useAuth()
+  if (loading) return <p className="p-8 text-sm text-slate-500">Memeriksa sesi…</p>
+  if (!user) return <Navigate to="/login" replace />
+  return <Outlet />
 }
 
-export default App
+function ResourceRoute({ resource }) {
+  const { user } = useAuth()
+  if (!canRead(resource, user.role)) {
+    return <p className="text-sm text-slate-600">Anda tidak punya akses ke halaman ini.</p>
+  }
+  if (resource.key === 'invoices') return <InvoicesPage resource={resource} />
+  if (resource.key === 'facility-bookings') return <BookingsPage resource={resource} />
+  return <ResourcePage key={resource.key} resource={resource} />
+}
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <AuthProvider>
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route element={<RequireAuth />}>
+            <Route element={<Layout />}>
+              <Route index element={<Dashboard />} />
+              {RESOURCES.map((r) => (
+                <Route key={r.key} path={r.key} element={<ResourceRoute key={r.key} resource={r} />} />
+              ))}
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Route>
+          </Route>
+        </Routes>
+      </AuthProvider>
+    </BrowserRouter>
+  )
+}
